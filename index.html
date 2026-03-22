@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Boxing Arena System</title>
+  <meta charset="UTF-8">
+
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+
+  <style>
+    body { font-family: Arial; text-align:center; background:#111; color:white; }
+    button { padding:10px 20px; margin:5px; font-size:16px; }
+    input, select { padding:8px; margin:5px; }
+    .box { width:40%; display:inline-block; padding:20px; margin:10px; border-radius:10px; }
+    .red { background:darkred; }
+    .blue { background:darkblue; }
+    #timer { font-size:28px; color:gold; }
+  </style>
+</head>
+
+<body>
+
+<h1>🥊 BOXING ARENA SYSTEM</h1>
+
+<!-- MAIN MENU -->
+<div id="mainMenu">
+  <button onclick="showMatchSetup()">Match Mode</button>
+  <button onclick="showPracticeSetup()">Practice Mode</button>
+</div>
+
+<!-- ================= MATCH MODE (UNCHANGED) ================= -->
+
+<div id="matchSetup" style="display:none;">
+  <h2>Match Setup</h2>
+
+  <select id="category">
+    <option>U14</option>
+    <option>U17</option>
+    <option>U19</option>
+  </select><br>
+
+  <h3>Red Corner</h3>
+  <input id="rName" placeholder="Name">
+  <input id="rAcademy" placeholder="Academy"><br>
+
+  <h3>Blue Corner</h3>
+  <input id="bName" placeholder="Name">
+  <input id="bAcademy" placeholder="Academy"><br>
+
+  <button onclick="startMatch()">Start Match</button>
+  <button onclick="backToMenu()">Back</button>
+</div>
+
+<div id="matchLive" style="display:none;">
+  <h2 id="liveCategory"></h2>
+  <h3>Round: <span id="roundNumber">1</span></h3>
+  <div id="timer">03:00</div>
+
+  <div class="box red">
+    <h3 id="redInfo"></h3>
+    <h1 id="redScore">0</h1>
+  </div>
+
+  <div class="box blue">
+    <h3 id="blueInfo"></h3>
+    <h1 id="blueScore">0</h1>
+  </div>
+
+  <button onclick="startRound()">Start Round</button>
+  <button onclick="nextRound()">Next Round</button>
+  <button onclick="backToMenu()">Back</button>
+</div>
+
+<!-- ================= PRACTICE MODE (FIXED) ================= -->
+
+<div id="practiceSetup" style="display:none;">
+
+  <h2>Practice Mode</h2>
+
+  <h3>Select Student</h3>
+  <select id="studentSelect"></select><br>
+
+  <h3>Or Add New Student</h3>
+  <input id="newStudentName" placeholder="Enter New Student Name">
+  <button onclick="addNewStudent()">Add Student</button><br>
+
+  <button onclick="startPractice()">Start Practice</button>
+  <button onclick="backToMenu()">Back</button>
+</div>
+
+<div id="practiceLive" style="display:none;">
+
+  <h2 id="practiceStudentName"></h2>
+
+  <h3>Total Punches</h3>
+  <h1 id="punchCount">0</h1>
+
+  <h3>Last Punch Gap</h3>
+  <h1 id="gapTime">0 ms</h1>
+
+  <h3>Average Gap</h3>
+  <h1 id="avgGap">0 ms</h1>
+
+  <button onclick="endPractice()">End Practice</button>
+</div>
+
+<script>
+
+/* ================= FIREBASE CONFIG ================= */
+
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "boxing-scoreboard-test.firebaseapp.com",
+  databaseURL: "https://boxing-scoreboard-test-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "boxing-scoreboard-test"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+/* ================= MENU ================= */
+
+function hideAll(){
+  mainMenu.style.display="none";
+  matchSetup.style.display="none";
+  matchLive.style.display="none";
+  practiceSetup.style.display="none";
+  practiceLive.style.display="none";
+}
+
+function backToMenu(){
+  hideAll();
+  mainMenu.style.display="block";
+}
+
+function showMatchSetup(){
+  hideAll();
+  matchSetup.style.display="block";
+}
+
+function showPracticeSetup(){
+  hideAll();
+  practiceSetup.style.display="block";
+  loadStudents();
+}
+
+/* ================= MATCH MODE (UNCHANGED) ================= */
+
+let round=1;
+let timerInterval;
+let timeLeft=180;
+
+function startMatch(){
+
+  round=1;
+  roundNumber.innerText=round;
+
+  redInfo.innerText=rName.value+" ("+rAcademy.value+")";
+  blueInfo.innerText=bName.value+" ("+bAcademy.value+")";
+  liveCategory.innerText="Category: "+category.value;
+
+  hideAll();
+  matchLive.style.display="block";
+}
+
+function startRound(){
+  timeLeft=180;
+  timerInterval=setInterval(()=>{
+    let m=Math.floor(timeLeft/60);
+    let s=timeLeft%60;
+    timer.innerText=(m<10?"0":"")+m+":"+(s<10?"0":"")+s;
+    timeLeft--;
+    if(timeLeft<0){
+      clearInterval(timerInterval);
+      alert("Round Finished");
+    }
+  },1000);
+}
+
+function nextRound(){
+  round++;
+  roundNumber.innerText=round;
+  clearInterval(timerInterval);
+  timer.innerText="03:00";
+}
+
+db.ref("arena/score/red").on("value",snap=>{
+  redScore.innerText=snap.val()||0;
+});
+
+db.ref("arena/score/blue").on("value",snap=>{
+  blueScore.innerText=snap.val()||0;
+});
+
+/* ================= PRACTICE MODE (FIXED) ================= */
+
+let punchCount=0;
+let lastTime=0;
+let totalGap=0;
+let selectedStudent="";
+
+function loadStudents(){
+  studentSelect.innerHTML="";
+  db.ref("students").once("value",snap=>{
+    snap.forEach(child=>{
+      const option=document.createElement("option");
+      option.value=child.key;
+      option.text=child.val().name;
+      studentSelect.add(option);
+    });
+  });
+}
+
+function addNewStudent(){
+  const name=newStudentName.value.trim();
+  if(name==="") return alert("Enter student name");
+
+  const newRef=db.ref("students").push();
+  newRef.set({ name:name });
+
+  newStudentName.value="";
+  loadStudents();
+  alert("Student Added");
+}
+
+function startPractice(){
+
+  if(studentSelect.value===""){
+    alert("Select a student");
+    return;
+  }
+
+  selectedStudent=studentSelect.value;
+
+  practiceStudentName.innerText=
+    studentSelect.options[studentSelect.selectedIndex].text;
+
+  punchCount=0;
+  lastTime=0;
+  totalGap=0;
+
+  punchCountDisplay();
+
+  hideAll();
+  practiceLive.style.display="block";
+}
+
+function endPractice(){
+
+  const avg=(punchCount>1)?Math.floor(totalGap/(punchCount-1)):0;
+
+  db.ref("practiceHistory/"+selectedStudent+"/"+Date.now()).set({
+    totalPunch:punchCount,
+    avgGap:avg
+  });
+
+  backToMenu();
+}
+
+db.ref("arena/practice/force").on("value",snap=>{
+  const force=snap.val();
+  if(!force) return;
+
+  if(force>300 && practiceLive.style.display==="block"){
+
+    const now=Date.now();
+    punchCount++;
+    punchCountDisplay();
+
+    if(lastTime!==0){
+      const gap=now-lastTime;
+      gapTime.innerText=gap+" ms";
+      totalGap+=gap;
+      avgGap.innerText=Math.floor(totalGap/(punchCount-1))+" ms";
+    }
+
+    lastTime=now;
+  }
+});
+
+function punchCountDisplay(){
+  document.getElementById("punchCount").innerText=punchCount;
+}
+
+</script>
+</body>
+</html>
