@@ -21,6 +21,16 @@ IoT-based real-time boxing scoring and practice analytics system using ESP32 and
 - ESP32 sends data to Firebase
 - Website reads data and updates live score
 
+##live demo
+https://jesxav2005-coder.github.io/boxing-arena-system/
+## 📸 Screenshots
+
+### Match Mode
+![Match](match.png)
+
+### Practice Mode
+![Practice](practice.png)
+
 ## ⚡ Future Improvements
 - AI-based punch analysis
 - Mobile app version
